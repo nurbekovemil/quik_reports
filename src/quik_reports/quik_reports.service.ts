@@ -79,26 +79,38 @@ export class QuikReportsService {
     if (sales.length === 0) return null;
   
     const firstTrade = sales[0];
-    const nominalPerBond = 100; // Допустим, номинал одной облигации — 100 сом
+    const nominalPerBond = 100; // номинал одной облигации
   
-    const totalQty = sales.reduce((sum, t) => sum + Number(t.Qty), 0);
-    const totalValueActual = sales.reduce((sum, t) => sum + Number(t.Value), 0);
+    const totalQty = sales.reduce((sum, t) => sum + Number(t.Qty), 0); // Всего штук
+    const totalValueActual = sales.reduce((sum, t) => sum + Number(t.Value), 0); // Фактическая сумма размещения
+    const totalValueNominal = totalQty * nominalPerBond; // Сумма по номиналу
   
+    // Уникальные участники (покупатели и продавцы)
     const participantsSet = new Set();
     trades.forEach(t => {
-      participantsSet.add(t.FirmName);
-      participantsSet.add(t.CPFirmName);
+      if (t.FirmName) participantsSet.add(t.FirmName);
+      if (t.CPFirmName) participantsSet.add(t.CPFirmName);
     });
+  
+    // Конкурентные/неконкурентные заявки (Kind = "Обычная" → конкурентная, "Неконкурентная" → неконкурентная)
+    const competitive = sales.filter(t => t.Kind === "Обычная");
+    const nonCompetitive = sales.filter(t => t.Kind === "Неконкурентная");
+  
+    const compQty = competitive.reduce((sum, t) => sum + Number(t.Qty), 0);
+    const compValue = competitive.reduce((sum, t) => sum + Number(t.Value), 0);
+  
+    const nonCompQty = nonCompetitive.reduce((sum, t) => sum + Number(t.Qty), 0);
+    const nonCompValue = nonCompetitive.reduce((sum, t) => sum + Number(t.Value), 0);
   
     const uniquePrices = {};
     sales.forEach(t => {
       const price = Number(t.Price);
       if (!uniquePrices[price]) {
         uniquePrices[price] = {
-          price,
-          nominal: 0,
-          actual: 0,
-          yield: Number(t.Yield),
+          price,                                 // Цена размещения
+          nominal: 0,                            // Сумма по номиналу
+          actual: 0,                             // Сумма фактическая
+          yield: Number(t.Yield),               // Доходность
         };
       }
       uniquePrices[price].nominal += Number(t.Qty) * nominalPerBond;
@@ -107,36 +119,37 @@ export class QuikReportsService {
   
     const pricesArray = Object.values(uniquePrices).map((p: any) => ({
       ...p,
-      yieldByPrice: p.yield // можно изменить расчёт, если потребуется
+      yieldByPrice: p.yield // Доходность по цене
     }));
   
     return {
-      date: new Date(firstTrade.TradeDateTime).toISOString().split('T')[0],
-      secCode: firstTrade.SecCode,
-      registrationNumber: firstTrade.SecCode,
-      totalQty,
-      totalValueNominal: totalQty * nominalPerBond,
-      totalValueActual,
-      couponRate: null, // можно подставить, если есть справочник
-      participants: participantsSet.size,
-      institutionalInvestors: null, // не определяем пока
-      financialInstitutes: null,
-      residents: null,
-      nonResidents: null,
+      date: new Date(firstTrade.TradeDateTime).toISOString().split('T')[0],  // Дата проведения аукциона
+      secCode: firstTrade.SecCode,                                           // Код ценной бумаги
+      registrationNumber: firstTrade.SecCode,                                // Рег. номер выпуска
+      totalQty,                                                              // Всего размещено (штук)
+      totalValueNominal,                                                     // Сумма размещения по номиналу
+      totalValueActual,                                                      // Сумма размещения фактическая
+      couponRate: null,                                                      // Купонная ставка (если будет)
+      participants: participantsSet.size,                                    // Кол-во участников
+      institutionalInvestors: null,                                          // Институт. инвесторы
+      financialInstitutes: null,                                             // Финансовые институты
+      residents: null,                                                       // Резиденты
+      nonResidents: null,                                                    // Нерезиденты
       competitiveBids: {
-        qty: totalQty,
-        nominal: totalQty * nominalPerBond,
-        actual: totalValueActual,
-        percentFromTotal: "100%",
+        qty: compQty,                                                        // Конкурентные заявки - количество
+        nominal: compQty * nominalPerBond,                                   // по номиналу
+        actual: compValue,                                                   // фактически
+        percentFromTotal: ((compValue / totalValueActual) * 100).toFixed(2) + '%' // доля от общего
       },
       nonCompetitiveBids: {
-        qty: 0,
-        nominal: 0,
-        actual: 0,
-        percentFromTotal: "0%",
+        qty: nonCompQty,                                                     // Неконкурентные заявки - количество
+        nominal: nonCompQty * nominalPerBond,
+        actual: nonCompValue,
+        percentFromTotal: ((nonCompValue / totalValueActual) * 100).toFixed(2) + '%'
       },
-      prices: pricesArray
+      prices: pricesArray                                                    // По каждой цене: цена, сумма по номиналу, фактическая, доходность
     };
   }
+  
   
 }
