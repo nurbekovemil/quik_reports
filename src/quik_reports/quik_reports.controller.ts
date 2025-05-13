@@ -15,8 +15,23 @@ export class QuikReportsController {
     return this.quikReportsService.getReportF1();
   }
 
-  @Get('auction')
-  findAuction(@Query() query: any) {
-    return this.quikReportsService.getAuctionReport(query.startDate);
+  @Get('auction/first')
+  firstReportAuction(@Query() query: any) {
+    return this.quikReportsService.getAuctionFirstReport(query.startDate);
+  }
+
+  @Get('auction/second')
+  secondReportAuction(@Query() query: any) {
+    return this.quikReportsService.getAuctionSecondReport(query.startDate);
+  }
+
+    @Get('auction/depo')
+  getDepositoryReport(@Query() query: any) {
+    return this.quikReportsService.getDepositoryReport(query.startDate);
+  }
+
+      @Get('auction/order')
+  getClassificationReport(@Query() query: any) {
+    return this.quikReportsService.getClassificationReport(query.startDate);
   }
 }
