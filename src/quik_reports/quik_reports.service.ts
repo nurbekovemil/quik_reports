@@ -66,7 +66,7 @@ export class QuikReportsService {
   }
 
   async getAuctionFirstReport(startDate?: string) {
-    let query = `SELECT * FROM "Trades" where DATE("TradeDate") = '${startDate}'`;
+    let query = `SELECT * FROM "Trades" where DATE("TradeDate") = '${startDate}' and "Operation" = 'Продажа'`;
     console.log(query)
     const trades = await this.dataSource.query(query);
     const firstReport = await this.firstSummaryStatementReport(trades); // Первая ведомость
@@ -88,8 +88,10 @@ export class QuikReportsService {
     // Уникальные участники (покупатели и продавцы)
     const participantsSet = new Set();
     trades.forEach(t => {
-      if (t.FirmName) participantsSet.add(t.FirmName);
-      if (t.CPFirmName) participantsSet.add(t.CPFirmName);
+      // if (t.FirmName) participantsSet.add(t.FirmName);
+      // if (t.CPFirmName) participantsSet.add(t.CPFirmName);
+      if (t.FirmId) participantsSet.add(t.FirmId);
+      if (t.CPFirmId) participantsSet.add(t.CPFirmId);
     });
   
     // Конкурентные/неконкурентные заявки (Kind = "Обычная" → конкурентная, "Неконкурентная" → неконкурентная)
@@ -152,7 +154,7 @@ export class QuikReportsService {
   }
   
   async getAuctionSecondReport(startDate?: string) {
-    let query = `SELECT * FROM "Trades" where DATE("TradeDate") = '${startDate}'`;
+    let query = `SELECT * FROM "Trades" where DATE("TradeDate") = '${startDate}' and "Operation" = 'Продажа'`;
     console.log(query)
     const trades = await this.dataSource.query(query);
     const firstReport = await this.secondSummaryStatementReport(trades); // Первая ведомость
@@ -215,16 +217,17 @@ export class QuikReportsService {
   // }
 
   async secondSummaryStatementReport(trades) {
-  const NOMINAL_PER_BOND = 100;
+    const sales = trades.filter(t => t.Operation === "Продажа");
+     if (sales.length === 0) return null;
+    const NOMINAL_PER_BOND = 100;
 
   // фильтруем конкурентные/неконкурентные
-  const competitive = trades.filter(t => t.Kind === "Обычная");
-  const nonCompetitive = trades.filter(t => t.Kind === "Неконкурентная");
+  const competitive = sales.filter(t => t.Kind === "Обычная");
+  const nonCompetitive = sales.filter(t => t.Kind === "Неконкурентная");
 
   // суммы по штукам и факту
   const sumQty = arr => arr.reduce((s, t) => s + Number(t.Qty), 0);
   const sumValue = arr => arr.reduce((s, t) => s + Number(t.Value), 0);
-
   const compQty = sumQty(competitive);
   const nonCompQty = sumQty(nonCompetitive);
   const compActual = sumValue(competitive);
@@ -242,7 +245,9 @@ export class QuikReportsService {
   const avgYield = totalQty
     ? trades.reduce((s, t) => s + Number(t.Yield) * Number(t.Qty), 0) / totalQty
     : 0;
-
+  const compNominal = compQty * NOMINAL_PER_BOND;
+  const nonCompNominal = nonCompQty * NOMINAL_PER_BOND;
+  
   // Макс./минимальная цена и доходности на ней
   const prices = trades.map(t => Number(t.Price));
   const maxPrice = Math.max(...prices);
@@ -251,19 +256,29 @@ export class QuikReportsService {
   const yieldAtCutOff = trades.find(t => Number(t.Price) === cutOffPrice)?.Yield ?? 0;
 
   return {
-    // итоговые объёмы в сомах
-    demandNominal: totalNominal,     // объём спроса (по номиналу)
-    placementNominal: totalNominal,  // объём размещения (по номиналу) — в нашем массиве исполненных совпадает
-    actualPlacement: totalActual,    // объём размещения фактически
+      // конкурентная
+    compQty,
+    compNominal,
+    compActual,
 
-    averagePrice: Number(avgPrice.toFixed(2)),      // средневзвешенная цена
-    averageYield: Number(avgYield.toFixed(2)),      // средневзвешенная доходность
+    // неконкурентная
+    nonCompQty,
+    nonCompNominal,
+    nonCompActual,
 
-    maxPrice: Number(maxPrice.toFixed(2)),          // максимальная цена
-    yieldAtMaxPrice: Number(Number(yieldAtMax).toFixed(2)),   // доходность по макс. цене
+    // // всего
+    // totalQty,
+    // totalNominal: compNominal + nonCompNominal,
+    // totalActual,
 
-    cutOffPrice: Number(cutOffPrice.toFixed(2)),    // цена отсечения
-    yieldAtCutOff: Number(Number(yieldAtCutOff).toFixed(2)), // доходность по цене отсечения
+    averagePrice: Number(avgPrice.toFixed(2)),
+    averageYield: Number(avgYield.toFixed(2)),
+
+    // maxPrice: Number(maxPrice.toFixed(2)),
+    // yieldAtMaxPrice: Number(Number(yieldAtMax).toFixed(2)),
+
+    // cutOffPrice: Number(cutOffPrice.toFixed(2)),
+    // yieldAtCutOff: Number(Number(yieldAtCutOff).toFixed(2)),
   };
 }
 /**
@@ -481,5 +496,4 @@ async getClassificationReport(date: string) {
     ]
   };
 }
-
 }
